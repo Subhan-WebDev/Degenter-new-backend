@@ -18,8 +18,6 @@ export async function parseBlock(raw) {
   const pools   = [];
   const swaps   = [];
   const liqs    = [];
-  const prices  = []; // reserve snapshots (writers will compute price / ohlcv)
-
   const N = Math.max(txResults.length, hashes.length);
 
   for (let i = 0; i < N; i++) {
@@ -116,21 +114,6 @@ export async function parseBlock(raw) {
         height, tx_hash, signer, msg_index, created_at: timestamp
       });
 
-      // emit a price “input” event when we have both reserves
-      if (res1d && res1a && res2d && res2a) {
-        prices.push({
-          kind: 'reserves_snapshot',
-          pair_contract,
-          reserves: [
-            { denom: res1d, amount_base: res1a },
-            { denom: res2d, amount_base: res2a }
-          ],
-          at: timestamp,
-          height,
-          tx_hash,
-          source: 'swap'
-        });
-      }
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -187,24 +170,10 @@ export async function parseBlock(raw) {
         height, tx_hash, signer, msg_index, created_at: timestamp
       });
 
-      if (res1d && res1a && res2d && res2a) {
-        prices.push({
-          kind: 'reserves_snapshot',
-          pair_contract,
-          reserves: [
-            { denom: res1d, amount_base: res1a },
-            { denom: res2d, amount_base: res2a }
-          ],
-          at: timestamp,
-          height,
-          tx_hash,
-          source: action
-        });
-      }
     }
   }
 
-  return { pools, swaps, liqs, prices };
+  return { pools, swaps, liqs };
 }
 
 export default { parseBlock };

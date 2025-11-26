@@ -15,8 +15,7 @@ const CONSUMER    = process.env.CONSUMER || `proc-${Math.random().toString(36).s
 const STREAM_OUTS = {
   new_pool:  process.env.STREAM_NEW_POOL  || 'events:new_pool',
   swap:      process.env.STREAM_SWAP      || 'events:swap',
-  liquidity: process.env.STREAM_LIQUIDITY || 'events:liquidity',
-  price:     process.env.STREAM_PRICE     || 'events:price_tick'
+  liquidity: process.env.STREAM_LIQUIDITY || 'events:liquidity'
 };
 
 const { client: redis, connect: redisConnect } = createRedisClient('processor');
@@ -38,7 +37,6 @@ async function handler(records, { ackMany }) {
       for (const p of out.pools)   await emit(STREAM_OUTS.new_pool,  p);
       for (const s of out.swaps)   await emit(STREAM_OUTS.swap,      s);
       for (const l of out.liqs)    await emit(STREAM_OUTS.liquidity, l);
-      for (const t of out.prices)  await emit(STREAM_OUTS.price,     t);
 
     } catch (e) {
       warn('parse error', e?.message || e);

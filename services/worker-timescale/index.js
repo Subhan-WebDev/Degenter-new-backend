@@ -8,13 +8,11 @@ import { info, warn, err, debug } from '../../common/log.js';
 
 import { handlePoolEvent } from './writers/pools.js';
 import { handleSwapEvent, handleLiquidityEvent } from './writers/trades.js';
-import { handlePriceSnapshot } from './writers/prices.js';
 
 const STREAMS = {
   new_pool:  process.env.STREAM_NEW_POOL  || 'events:new_pool',
   swap:      process.env.STREAM_SWAP      || 'events:swap',
-  liquidity: process.env.STREAM_LIQUIDITY || 'events:liquidity',
-  price:     process.env.STREAM_PRICE     || 'events:price_tick'
+  liquidity: process.env.STREAM_LIQUIDITY || 'events:liquidity'
 };
 
 const GROUP     = process.env.TIMESCALE_GROUP || 'timescale';
@@ -59,8 +57,7 @@ async function main() {
   await Promise.all([
     makeReader(STREAMS.new_pool,  handlePoolEvent),
     makeReader(STREAMS.swap,      handleSwapEvent),
-    makeReader(STREAMS.liquidity, handleLiquidityEvent),
-    makeReader(STREAMS.price,     handlePriceSnapshot)
+    makeReader(STREAMS.liquidity, handleLiquidityEvent)
   ]);
 
   info('worker-timescale running');

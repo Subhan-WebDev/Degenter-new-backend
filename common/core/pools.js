@@ -17,13 +17,14 @@ export async function upsertPool({ pairContract, baseDenom, quoteDenom, pairType
      RETURNING pool_id`,
      [pairContract, baseId, quoteId, String(pairType), isUzig, createdAt, height, txHash, signer]
   );
-  info('POOL UPSERT:', pairContract, `${baseDenom}/${quoteDenom}`, pairType, 'pool_id=', rows[0].pool_id);
-  return rows[0].pool_id;
+  const pool_id = rows[0].pool_id;
+  info('POOL UPSERT:', pairContract, `${baseDenom}/${quoteDenom}`, pairType, 'pool_id=', pool_id);
+  return { pool_id, base_id: baseId, quote_id: quoteId, is_uzig_quote: isUzig };
 }
 
 export async function poolWithTokens(pairContract) {
   const { rows } = await DB.query(`
-    SELECT p.pool_id, p.is_uzig_quote,
+    SELECT p.pool_id, p.pair_contract, p.pair_type, p.is_uzig_quote,
            b.token_id AS base_id, b.denom AS base_denom, COALESCE(b.exponent,6) AS base_exp,
            q.token_id AS quote_id, q.denom AS quote_denom, COALESCE(q.exponent,6) AS quote_exp
     FROM pools p

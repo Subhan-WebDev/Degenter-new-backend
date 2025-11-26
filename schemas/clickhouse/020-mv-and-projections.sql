@@ -1,0 +1,1 @@
+-- Materialized views / projections can be added here once aggregation needs are defined.

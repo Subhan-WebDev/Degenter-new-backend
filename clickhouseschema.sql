@@ -1,5 +1,8 @@
--- Use UTC everywhere
 SET timezone = 'UTC';
+
+-- Ensure database exists
+CREATE DATABASE IF NOT EXISTS degenter;
+USE degenter;
 
 -- ==================== CORE ENTITIES ====================
 

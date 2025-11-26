@@ -1,14 +1,11 @@
 // services/worker-clickhouse/writers/trades.js
 import { chInsertJSON } from '../../../common/db-clickhouse.js';
+import { poolWithTokens } from '../../../common/core/pools.js';
 import { classifyDirection } from '../../../common/core/parse.js';
-import { priceFromReserves_UZIGQuote } from '../../../common/core/prices.js';
 import { warn } from '../../../common/log.js';
 import { pushPoolState } from './pool_state.js';
-import { pushPriceFromReserves } from './prices.js';
-import { getPoolMeta } from '../lib/pool-resolver.js';
 
 const tradesBuffer = [];
-const ohlcvBuffer = [];
 const MAX_BUFFER = Number(process.env.CLICKHOUSE_TRADE_BUFFER || 1000);
 const FLUSH_MS   = Number(process.env.CLICKHOUSE_TRADE_FLUSH_MS || 2000);
 
@@ -36,22 +33,16 @@ async function pushTrade(row) {
   }
 }
 
-async function pushOhlcv(row) {
-  ohlcvBuffer.push(row);
-  if (ohlcvBuffer.length >= MAX_BUFFER) {
-    await flushTrades();
-  }
+export async function flushTrades() {
+  if (!tradesBuffer.length) return;
+  const batch = tradesBuffer.splice(0, tradesBuffer.length);
+  await chInsertJSON({ table: 'trades', rows: batch });
 }
 
-export async function flushTrades() {
-  if (tradesBuffer.length) {
-    const batch = tradesBuffer.splice(0, tradesBuffer.length);
-    await chInsertJSON({ table: 'trades', rows: batch });
-  }
-  if (ohlcvBuffer.length) {
-    const ohlcv = ohlcvBuffer.splice(0, ohlcvBuffer.length);
-    await chInsertJSON({ table: 'ohlcv_1m', rows: ohlcv });
-  }
+async function buildPoolContext(pair_contract) {
+  const pool = await poolWithTokens(pair_contract);
+  if (!pool) throw new Error(`unknown pool ${pair_contract}`);
+  return pool;
 }
 
 function mapReservesToBaseQuote(pool, e) {
@@ -68,7 +59,7 @@ function mapReservesToBaseQuote(pool, e) {
 
 export async function handleSwapEvent(e) {
   try {
-    const pool = await getPoolMeta(e.pair_contract, { retries: 20, delayMs: 500 });
+    const pool = await buildPoolContext(e.pair_contract);
     const direction = classifyDirection(e.offer_asset_denom, pool.quote_denom);
 
     await pushTrade({
@@ -102,38 +93,6 @@ export async function handleSwapEvent(e) {
         reserve_quote_base: toDecimal(reserves.quote.amount),
         updated_at: asDate(e.created_at)
       });
-
-      await pushPriceFromReserves(pool, [
-        { denom: reserves.base.denom, amount_base: reserves.base.amount },
-        { denom: reserves.quote.denom, amount_base: reserves.quote.amount }
-      ], e.created_at);
-
-      if (pool.is_uzig_quote) {
-        const bucket = new Date(Math.floor(new Date(e.created_at).getTime() / 60000) * 60000);
-        const priceReserves = [
-          { denom: reserves.base.denom, amount_base: reserves.base.amount },
-          { denom: reserves.quote.denom, amount_base: reserves.quote.amount }
-        ];
-        const price = priceFromReserves_UZIGQuote(
-          { base_denom: pool.base_denom, base_exp: Number(pool.base_exp ?? 0) },
-          priceReserves
-        );
-        const volume_zig = (e.offer_asset_denom === pool.quote_denom)
-          ? Number(e.offer_amount_base || 0) / 1e6
-          : Number(e.return_amount_base || 0) / 1e6;
-
-        await pushOhlcv({
-          pool_id: pool.pool_id,
-          bucket_start: bucket,
-          open: price,
-          high: price,
-          low: price,
-          close: price,
-          volume_zig,
-          trade_count: 1,
-          liquidity_zig: null
-        });
-      }
     }
   } catch (err) {
     warn('[ch/swap]', err?.message || err);
@@ -142,7 +101,7 @@ export async function handleSwapEvent(e) {
 
 export async function handleLiquidityEvent(e) {
   try {
-    const pool = await getPoolMeta(e.pair_contract, { retries: 20, delayMs: 500 });
+    const pool = await buildPoolContext(e.pair_contract);
     const isProvide = e.action === 'provide';
     const direction = isProvide ? 'provide' : 'withdraw';
 

@@ -1,5 +1,6 @@
 // services/worker-clickhouse/writers/prices.js
 import { chInsertJSON } from '../../../common/db-clickhouse.js';
+import { poolWithTokens } from '../../../common/core/pools.js';
 import { priceFromReserves_UZIGQuote } from '../../../common/core/prices.js';
 import { warn } from '../../../common/log.js';
 
@@ -25,20 +26,24 @@ async function pushTick(row) {
   }
 }
 
-export async function pushPriceFromReserves(meta, reserves, at) {
+export async function handlePriceSnapshot(e) {
+  if (e?.kind !== 'reserves_snapshot') return;
+
   try {
-    if (!meta?.is_uzig_quote) return;
+    const pool = await poolWithTokens(e.pair_contract);
+    if (!pool || !pool.is_uzig_quote) return;
+
     const price = priceFromReserves_UZIGQuote(
-      { base_denom: meta.base_denom, base_exp: Number(meta.base_exp ?? 0) },
-      reserves || []
+      { base_denom: pool.base_denom, base_exp: Number(pool.base_exp) },
+      e.reserves || []
     );
 
     if (price != null && Number.isFinite(price) && price > 0) {
       await pushTick({
-        pool_id: meta.pool_id,
-        token_id: meta.base_id,
+        pool_id: pool.pool_id,
+        token_id: pool.base_id,
         price_in_zig: price,
-        ts: asDate(at)
+        ts: asDate(e.at || e.created_at)
       });
     }
   } catch (err) {

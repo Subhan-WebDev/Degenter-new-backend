@@ -6,15 +6,16 @@ import { createRedisClient } from '../../common/redis-client.js';
 import { createConsumerGroup, readLoop } from '../../common/streams.js';
 import { info, warn, err } from '../../common/log.js';
 
-import { handlePoolEvent, flushPools } from './writers/pools.js';
+import { handlePoolEvent } from './writers/pools.js';
 import { handleSwapEvent, handleLiquidityEvent, flushTrades } from './writers/trades.js';
-import { flushPriceTicks } from './writers/prices.js';
+import { handlePriceSnapshot, flushPriceTicks } from './writers/prices.js';
 import { flushPoolState } from './writers/pool_state.js';
 
 const STREAMS = {
   new_pool:  process.env.STREAM_NEW_POOL  || 'events:new_pool',
   swap:      process.env.STREAM_SWAP      || 'events:swap',
-  liquidity: process.env.STREAM_LIQUIDITY || 'events:liquidity'
+  liquidity: process.env.STREAM_LIQUIDITY || 'events:liquidity',
+  price:     process.env.STREAM_PRICE     || 'events:price_tick'
 };
 
 const GROUP     = process.env.CLICKHOUSE_GROUP || 'clickhouse';
@@ -58,14 +59,15 @@ async function main() {
   await Promise.all([
     makeReader(STREAMS.new_pool,  handlePoolEvent),
     makeReader(STREAMS.swap,      handleSwapEvent),
-    makeReader(STREAMS.liquidity, handleLiquidityEvent)
+    makeReader(STREAMS.liquidity, handleLiquidityEvent),
+    makeReader(STREAMS.price,     handlePriceSnapshot)
   ]);
 
   info('worker-clickhouse running');
 }
 
 process.on('SIGINT', async () => {
-  await Promise.all([flushTrades(), flushPriceTicks(), flushPoolState(), flushPools()]);
+  await Promise.all([flushTrades(), flushPriceTicks(), flushPoolState()]);
   process.exit(0);
 });
 
